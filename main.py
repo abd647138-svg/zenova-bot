@@ -22,7 +22,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def ask_gemini(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
     data = {"contents": [{"parts": [{"text": text}]}]}
     r = requests.post(url, json=data, timeout=30)
     if r.status_code != 200:
