@@ -2,13 +2,29 @@ import os, google.generativeai as genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from PIL import Image
-import io
+import io, threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# باش Render ما يقولش No open ports
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running")
+    def log_message(self, *args):
+        pass
+
+def keep_alive():
+    port = int(os.environ.get("PORT", 10000))
+    HTTPServer(("0.0.0.0", port), Handler).serve_forever()
+
+threading.Thread(target=keep_alive, daemon=True).start()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 CREATOR = "Abdulrahman Ali"
 
@@ -23,7 +39,8 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         res = model.generate_content(update.message.text)
         await update.message.reply_text(res.text)
-    except:
+    except Exception as e:
+        print(f"GEMINI ERROR: {e}")
         await update.message.reply_text("صار خطأ، عاود حاول.")
 
 async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -34,7 +51,8 @@ async def photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         img = Image.open(io.BytesIO(data))
         res = model.generate_content(["اشرح شن فيها هاذي الصورة بالتفصيل بالعربي", img])
         await update.message.reply_text(res.text)
-    except:
+    except Exception as e:
+        print(f"PHOTO ERROR: {e}")
         await update.message.reply_text("ما قدرتش نحلل الصورة، عاود ابعتها.")
 
 app = ApplicationBuilder().token(BOT_TOKEN).build()
