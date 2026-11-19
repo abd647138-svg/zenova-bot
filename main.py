@@ -91,4 +91,26 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = update.message.caption or "What is in this image?"
-    await update.message.reply
+    await update.message.reply_text("Got the image, analyzing it now")
+    try:
+        photo = await update.message.photo[-1].get_file()
+        bio = io.BytesIO()
+        await photo.download_to_memory(bio)
+        bio.seek(0)
+        img = Image.open(bio)
+        answer = await ask_gemini(caption, image=img)
+        await update.message.reply_text(answer)
+    except Exception as e:
+        print(e)
+        await update.message.reply_text("Could not read the image, please send again")
+
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    print("ZENOVA AI Started")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
