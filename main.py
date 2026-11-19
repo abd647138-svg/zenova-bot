@@ -58,11 +58,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-
     if is_creator_question(text):
         await update.message.reply_text("I was created by Abdulrahman Ali")
         return
-
     low = text.lower()
     want_image = False
     if "generate image" in low:
@@ -73,7 +71,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         want_image = True
     if "draw" in low:
         want_image = True
-
     if want_image:
         await update.message.reply_text("One second, drawing it for you")
         try:
@@ -88,7 +85,6 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(e)
             await update.message.reply_text("Image generation is busy, try in a minute")
         return
-
     await update.message.reply_text("One second thinking")
     answer = await ask_gemini(text)
     await update.message.reply_text(answer)
