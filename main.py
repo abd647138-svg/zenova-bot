@@ -22,13 +22,7 @@ TEXT_MODELS = [
 
 IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
 
-SYSTEM_PROMPT = "You are ZENOVA AI, created by Abdulrahman Ali. Always reply in the same language and dialect the user used. If user asks who made you, answer only: Abdulrahman Ali. Be friendly and short. If user sends image, analyze it and answer what is asked."
-
-def is_arabic(text):
-    for ch in text:
-        if 1536 <= ord(ch) <= 1791:
-            return True
-    return False
+SYSTEM_PROMPT = "You are ZENOVA AI, created by Abdulrahman Ali. Always reply in the same language and dialect the user used. If user writes Libyan Arabic, reply Libyan Arabic. If user asks who made you, answer only: Abdulrahman Ali. Be friendly and short. If user sends image, analyze it."
 
 def is_creator_question(text):
     t = text.lower()
@@ -56,8 +50,6 @@ async def ask_gemini(prompt, image=None):
             print(f"Model failed: {model_name} - {e}")
             await asyncio.sleep(1)
             continue
-    if is_arabic(prompt):
-        return "صار ضغط شوية، عاود ابعت رسالتك توا"
     return "Busy now, please try again"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,13 +58,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
-    arabic = is_arabic(text)
 
     if is_creator_question(text):
-        if arabic:
-            await update.message.reply_text("اللي صنعني هو عبدالرحمن علي")
-        else:
-            await update.message.reply_text("I was created by Abdulrahman Ali")
+        await update.message.reply_text("I was created by Abdulrahman Ali")
         return
 
     low = text.lower()
@@ -85,18 +73,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         want_image = True
     if "draw" in low:
         want_image = True
-    if "صورة" in text:
-        want_image = True
-    if "ارسم" in text:
-        want_image = True
-    if "ديرلي" in text:
-        want_image = True
 
     if want_image:
-        if arabic:
-            await update.message.reply_text("ثواني نرسمهالك")
-        else:
-            await update.message.reply_text("One second, drawing it for you")
+        await update.message.reply_text("One second, drawing it for you")
         try:
             model = genai.GenerativeModel(IMAGE_MODEL)
             resp = await asyncio.to_thread(model.generate_content, f"Generate image: {text}")
@@ -104,48 +83,30 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if hasattr(part, "inline_data") and part.inline_data:
                     await update.message.reply_photo(photo=io.BytesIO(part.inline_data.data))
                     return
-            if arabic:
-                await update.message.reply_text("ما قدرتش نرسمها توا، جرب وصف تاني")
-            else:
-                await update.message.reply_text("Could not draw it now, try another description")
+            await update.message.reply_text("Could not draw it now, try another description")
         except Exception as e:
             print(e)
-            if arabic:
-                await update.message.reply_text("صار ضغط على توليد الصور، جرب بعد دقيقة")
-            else:
-                await update.message.reply_text("Image generation is busy, try in a minute")
+            await update.message.reply_text("Image generation is busy, try in a minute")
         return
 
-    if arabic:
-        await update.message.reply_text("ثواني نفكر")
-    else:
-        await update.message.reply_text("One second thinking")
+    await update.message.reply_text("One second thinking")
     answer = await ask_gemini(text)
     await update.message.reply_text(answer)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    caption = update.message.caption or ""
-    arabic = is_arabic(caption)
-    if arabic:
-        await update.message.reply_text("وصلتني الصورة، ثواني نحللها")
-    else:
-        await update.message.reply_text("Got the image, analyzing it now")
+    caption = update.message.caption or "What is in this image?"
+    await update.message.reply_text("Got the image, analyzing it now")
     try:
         photo = await update.message.photo[-1].get_file()
         bio = io.BytesIO()
         await photo.download_to_memory(bio)
         bio.seek(0)
         img = Image.open(bio)
-        if caption == "":
-            caption = "What is in this image?"
         answer = await ask_gemini(caption, image=img)
         await update.message.reply_text(answer)
     except Exception as e:
         print(e)
-        if arabic:
-            await update.message.reply_text("ما قدرتش نقرا الصورة توا، عاود ابعتها")
-        else:
-            await update.message.reply_text("Could not read the image, please send again")
+        await update.message.reply_text("Could not read the image, please send again")
 
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
