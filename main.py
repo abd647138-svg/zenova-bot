@@ -20,23 +20,21 @@ threading.Thread(target=keep_alive, daemon=True).start()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
-CREATOR = "Abdulrahman Ali"
 
 def ask_gemini(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_KEY}"
     data = {"contents": [{"parts": [{"text": text}]}]}
     r = requests.post(url, json=data, timeout=30)
     if r.status_code != 200:
-        return f"خطأ من جوجل: {r.status_code} - {r.text[:500]}"
+        return f"خطأ من جوجل: {r.status_code}"
     return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"اهلا بيك في ZENOVA AI\nصنعني {CREATOR}\n\nابعثلي اي سؤال.")
+    await update.message.reply_text("اهلا بيك في ZENOVA AI\nصنعني Abdulrahman Ali")
 
 async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.lower()
-    if "من صنعك" in text or "صنعك" in text:
-        await update.message.reply_text(f"صنعني {CREATOR}")
+    if "من صنعك" in update.message.text.lower() or "صنعك" in update.message.text.lower():
+        await update.message.reply_text("صنعني Abdulrahman Ali")
         return
     await update.message.reply_text("ثواني نفكر...")
     reply = ask_gemini(update.message.text)
@@ -45,4 +43,4 @@ async def chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
 app = ApplicationBuilder().token(BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat))
-app.run_polling()
+app.run_polling(drop_pending_updates=True)
