@@ -21,36 +21,8 @@ threading.Thread(target=keep_alive, daemon=True).start()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
-# نجيبو الموديلات المتوفرة عندك من جوجل تلقائيا
-CACHED_MODEL = None
-
-def get_model():
-    global CACHED_MODEL
-    if CACHED_MODEL:
-        return CACHED_MODEL
-    try:
-        r = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={GEMINI_KEY}", timeout=20)
-        data = r.json()
-        models = data.get("models", [])
-        # نفضل موديل flash
-        for m in models:
-            name = m.get("name", "")
-            methods = m.get("supportedGenerationMethods", [])
-            if "generateContent" in methods and "flash" in name:
-                CACHED_MODEL = name.replace("models/", "")
-                return CACHED_MODEL
-        # لو مفيش flash خود اول واحد يدعم generateContent
-        for m in models:
-            if "generateContent" in m.get("supportedGenerationMethods", []):
-                CACHED_MODEL = m.get("name", "").replace("models/", "")
-                return CACHED_MODEL
-    except Exception as e:
-        print(e)
-    return "gemini-2.5-flash"
-
 def ask_gemini(text):
-    model = get_model()
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key={GEMINI_KEY}"
     data = {"contents": [{"parts": [{"text": text}]}]}
     r = requests.post(url, json=data, timeout=30)
     if r.status_code != 200:
