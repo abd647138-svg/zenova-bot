@@ -22,12 +22,18 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 def ask_gemini(text):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
-    data = {"contents": [{"parts": [{"text": text}]}]}
-    r = requests.post(url, json=data, timeout=30)
-    if r.status_code != 200:
-        return f"خطأ من جوجل: {r.status_code}"
-    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+    models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-pro"]
+    for model in models:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={GEMINI_KEY}"
+        data = {"contents": [{"parts": [{"text": text}]}]}
+        try:
+            r = requests.post(url, json=data, timeout=30)
+            if r.status_code == 200:
+                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            last_error = f"{model} -> {r.status_code} : {r.text[:400]}"
+        except Exception as e:
+            last_error = str(e)
+    return f"خطأ من جوجل:\n{last_error}"
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("اهلا بيك في ZENOVA AI\nصنعني Abdulrahman Ali")
