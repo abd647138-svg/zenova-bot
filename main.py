@@ -15,11 +15,16 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 genai.configure(api_key=GEMINI_API_KEY)
 
-TEXT_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
+TEXT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
 IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
-SYSTEM_PROMPT = "You are ZENOVA AI, created by Abdulrahman Ali. Always reply in the same language and dialect the user uses."
+SYSTEM_PROMPT = """You are ZENOVA AI, created by Abdulrahman Ali.
+CRITICAL LANGUAGE RULE: You MUST reply in the exact same language and dialect the user uses.
+- If user writes in Libyan Arabic / Arabic dialect -> reply in Libyan Arabic dialect, same style.
+- If user writes in Modern Standard Arabic -> reply in Arabic.
+- If user writes in English -> reply in English.
+- If user writes in French -> reply in French.
+Never reply in English when the user wrote in Arabic. Never translate the user. Match their language 100%."""
 
-# --- Web Server for Render ---
 app = Flask(__name__)
 @app.route('/')
 def home():
@@ -28,7 +33,9 @@ def run_web():
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
 Thread(target=run_web, daemon=True).start()
-# -----------------------------
+
+def is_arabic(text):
+    return any("\u0600" <= c <= "\u06FF" for c in text)
 
 def is_creator_question(text):
     t = text.lower()
@@ -36,6 +43,10 @@ def is_creator_question(text):
     if "who created you" in t: return True
     if "who developed you" in t: return True
     if "who is your creator" in t: return True
+    if "من صنعك" in t: return True
+    if "من صانعك" in t: return True
+    if "من اللي صنعك" in t: return True
+    if "من اللي دارك" in t: return True
     return False
 
 async def ask_gemini(prompt, image=None):
@@ -52,6 +63,8 @@ async def ask_gemini(prompt, image=None):
             print(f"Model failed: {model_name} - {e}")
             await asyncio.sleep(1)
             continue
+    if is_arabic(prompt):
+        return "سامحني يا غالي، توا مشغول شوية، عاود جرب بعد شوية"
     return "Sorry bro, please try again."
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -60,7 +73,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     if is_creator_question(text):
-        await update.message.reply_text("I was created by Abdulrahman Ali")
+        if is_arabic(text):
+            await update.message.reply_text("اللي صنعني هو عبدالرحمن علي")
+        else:
+            await update.message.reply_text("I was created by Abdulrahman Ali")
         return
     low = text.lower()
     want_image = False
@@ -68,6 +84,9 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if "make image" in low: want_image = True
     if "create image" in low: want_image = True
     if "draw" in low: want_image = True
+    if "دير صورة" in low: want_image = True
+    if "ارسم" in low: want_image = True
+    if "ديرلي صورة" in low: want_image = True
     if want_image:
         await update.message.reply_text("One second, drawing it for you")
         try:
