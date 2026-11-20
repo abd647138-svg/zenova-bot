@@ -1,11 +1,13 @@
 import os
-import io
 import asyncio
 import logging
+import telegram
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
 from PIL import Image
+from flask import Flask
+from threading import Thread
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,12 +19,26 @@ genai.configure(api_key=GEMINI_API_KEY)
 TEXT_MODELS = [
     "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
-    "gemini-1.5-flash",
+    "gemini-1.5-flash"
 ]
 
 IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
 
-SYSTEM_PROMPT = "You are ZENOVA AI, created by Abdulrahman Ali. Always reply in the same language and dialect the user used. If user writes Libyan Arabic, reply Libyan Arabic. If user asks who made you, answer only: Abdulrahman Ali. Be friendly and short. If user sends image, analyze it."
+SYSTEM_PROMPT = "You are ZENOVA AI, created by Abdulrahman Ali. Always reply in the same language and dialect the user uses."
+
+# --- Web Server for Render ---
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "ZENOVA AI is alive!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
+
+Thread(target=run_web, daemon=True).start()
+# -----------------------------
 
 def is_creator_question(text):
     t = text.lower()
@@ -33,6 +49,8 @@ def is_creator_question(text):
     if "who developed you" in t:
         return True
     if "who is your creator" in t:
+        return True
+    if "who is your" in t and "maker" in t:
         return True
     return False
 
@@ -50,11 +68,10 @@ async def ask_gemini(prompt, image=None):
             print(f"Model failed: {model_name} - {e}")
             await asyncio.sleep(1)
             continue
-    return "Busy now, please try again"
+    return "Sorry bro, please try again."
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "Welcome to ZENOVA AI. Send me any message, or image, or ask me to make an image for you."
-    await update.message.reply_text(msg)
+    await update.message.reply_text("Welcome to ZENOVA AI. Send me any message, or image, or ask me to make an image for you.")
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -71,46 +88,52 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
         want_image = True
     if "draw" in low:
         want_image = True
+
     if want_image:
         await update.message.reply_text("One second, drawing it for you")
         try:
             model = genai.GenerativeModel(IMAGE_MODEL)
-            resp = await asyncio.to_thread(model.generate_content, f"Generate image: {text}")
+            resp = await asyncio.to_thread(model.generate_content, text)
+            # If model returns image, handle it
             for part in resp.candidates[0].content.parts:
-                if hasattr(part, "inline_data") and part.inline_data:
-                    await update.message.reply_photo(photo=io.BytesIO(part.inline_data.data))
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    import io
+                    img_bytes = part.inline_data.data
+                    await update.message.reply_photo(photo=img_bytes)
                     return
-            await update.message.reply_text("Could not draw it now, try another description")
+            await update.message.reply_text(resp.text if resp.text else "Done, but no image returned")
         except Exception as e:
-            print(e)
-            await update.message.reply_text("Image generation is busy, try in a minute")
+            print(f"Image failed: {e}")
+            await update.message.reply_text("Sorry, image generation failed, try again")
         return
-    await update.message.reply_text("One second thinking")
-    answer = await ask_gemini(text)
-    await update.message.reply_text(answer)
+
+    # Normal text
+    reply = await ask_gemini(text)
+    await update.message.reply_text(reply)
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    caption = update.message.caption or "What is in this image?"
-    await update.message.reply_text("Got the image, analyzing it now")
     try:
-        photo = await update.message.photo[-1].get_file()
+        photo = update.message.photo[-1]
+        file = await photo.get_file()
+        import io
         bio = io.BytesIO()
-        await photo.download_to_memory(bio)
+        await file.download_to_memory(bio)
         bio.seek(0)
-        img = Image.open(bio)
-        answer = await ask_gemini(caption, image=img)
-        await update.message.reply_text(answer)
+        image = Image.open(bio)
+        caption = update.message.caption or "Describe this image"
+        reply = await ask_gemini(caption, image)
+        await update.message.reply_text(reply)
     except Exception as e:
-        print(e)
-        await update.message.reply_text("Could not read the image, please send again")
+        print(f"Photo failed: {e}")
+        await update.message.reply_text("Sorry, couldn't read that image")
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    print("ZENOVA AI Started")
-    app.run_polling()
+async def main():
+    app_bot = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app_bot.add_handler(CommandHandler("start", start))
+    app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    print("ZENOVA Bot Started...")
+    await app_bot.run_polling()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
