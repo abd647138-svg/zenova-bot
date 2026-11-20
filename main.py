@@ -1,10 +1,11 @@
 import os
 import asyncio
 import logging
-import telegram
+import io
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from PIL import Image
 from flask import Flask
 from threading import Thread
@@ -13,17 +14,20 @@ logging.basicConfig(level=logging.INFO)
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-genai.configure(api_key=GEMINI_API_KEY)
+
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 TEXT_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash"]
 IMAGE_MODEL = "gemini-2.0-flash-preview-image-generation"
-SYSTEM_PROMPT = """You are ZENOVA AI, created by Abdulrahman Ali.
+
+SYSTEM_PROMPT = """You are ZENOVA AI, created by Pablo Escobar.
 CRITICAL LANGUAGE RULE: You MUST reply in the exact same language and dialect the user uses.
 - If user writes in Libyan Arabic / Arabic dialect -> reply in Libyan Arabic dialect, same style.
 - If user writes in Modern Standard Arabic -> reply in Arabic.
 - If user writes in English -> reply in English.
 - If user writes in French -> reply in French.
-Never reply in English when the user wrote in Arabic. Never translate the user. Match their language 100%."""
+Never reply in English when the user wrote in Arabic. Never translate the user. Match their language 100%.
+If someone asks who created you, say Pablo Escobar."""
 
 app = Flask(__name__)
 @app.route('/')
@@ -52,11 +56,15 @@ def is_creator_question(text):
 async def ask_gemini(prompt, image=None):
     for model_name in TEXT_MODELS:
         try:
-            model = genai.GenerativeModel(model_name, system_instruction=SYSTEM_PROMPT)
+            contents = [prompt]
             if image:
-                resp = await asyncio.to_thread(model.generate_content, [prompt, image])
-            else:
-                resp = await asyncio.to_thread(model.generate_content, prompt)
+                contents.append(image)
+            resp = await asyncio.to_thread(
+                client.models.generate_content,
+                model=model_name,
+                contents=contents,
+                config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT)
+            )
             if resp.text:
                 return resp.text
         except Exception as e:
@@ -72,11 +80,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
+    if "من هذا" in text or "من هدا" in text or "who is this" in text.lower():
+        await update.message.reply_text("Abdulrahman Ali")
+        return
     if is_creator_question(text):
         if is_arabic(text):
-            await update.message.reply_text("اللي صنعني هو عبدالرحمن علي")
+            await update.message.reply_text("صنعني بابلو سكوبار")
         else:
-            await update.message.reply_text("I was created by Abdulrahman Ali")
+            await update.message.reply_text("I was created by Pablo Escobar")
         return
     low = text.lower()
     want_image = False
@@ -90,10 +101,14 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if want_image:
         await update.message.reply_text("One second, drawing it for you")
         try:
-            model = genai.GenerativeModel(IMAGE_MODEL)
-            resp = await asyncio.to_thread(model.generate_content, text)
+            resp = await asyncio.to_thread(
+                client.models.generate_content,
+                model=IMAGE_MODEL,
+                contents=text,
+                config=types.GenerateContentConfig(response_modalities=["TEXT", "IMAGE"])
+            )
             for part in resp.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
+                if part.inline_data and part.inline_data.data:
                     await update.message.reply_photo(photo=part.inline_data.data)
                     return
             await update.message.reply_text(resp.text if resp.text else "Done, but no image returned")
@@ -108,7 +123,6 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         photo = update.message.photo[-1]
         file = await photo.get_file()
-        import io
         bio = io.BytesIO()
         await file.download_to_memory(bio)
         bio.seek(0)
