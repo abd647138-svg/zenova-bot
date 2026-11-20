@@ -126,7 +126,7 @@ def main():
     app_bot.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app_bot.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     print("ZENOVA Bot Started...")
-    app_bot.run_polling()
+    app_bot.run_polling(drop_pending_updates=True, allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
